@@ -7,5 +7,5 @@ const usageLogRouter = Router();
 
 usageLogRouter.post("/", auth([Role.Admin]), usageLogController.createUsageLog);
 usageLogRouter.get("/", usageLogController.getUsageLogs);
-
+usageLogRouter.patch("/:id", usageLogController.updateUsageLog);
 export default usageLogRouter;
