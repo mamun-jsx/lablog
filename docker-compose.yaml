@@ -25,8 +25,8 @@ services:
       # POSTGRES_DB -> pulls the database name securely from your hidden .env file!
     ports:
     # ports -> maps ports from your Mac host to the Docker container.
-      - "5432:5432"
-      # "5432:5432" -> format is "HOST:CONTAINER". Maps Mac's port 5432 to the container's port 5432.
+      - "5433:5432"
+      # "5433:5432" -> format is "HOST:CONTAINER". Maps Mac's port 5433 to the container's port 5432. (Changed to 5433 because your Mac is already using 5432!)
     networks:
     # networks -> connects this container to a custom Docker network so it can talk to other services.
       - lablog-net
