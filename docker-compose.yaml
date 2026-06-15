@@ -1,40 +1,95 @@
-# This version line is optional now, but tells older Docker Compose versions what syntax to expect.
+# Step 1: define version of docker compose
 version: "3.8"
+# version -> tells older Docker Compose versions what syntax rules to expect.
 
-# 'services' is the block where we define all the containers we want to run together.
+# Step 2: define all services (your containers)
 services:
-  # 'api' is the name we give to this service.
-  # When it runs, Compose will automatically name the container based on the folder + service name (e.g. lablog-api-1)
-  # Command line equivalent: --name my-api
-  api:
-    # 'build' tells Docker to build a new image from our source code instead of pulling an existing one.
-    # Command line equivalent: docker build -t lab-log-api .
-    build:
-      # 'context: .' means use the current directory ('.') to find the files for the build.
-      context: .
-      # 'dockerfile: Dockerfile' tells it exactly which file contains the build instructions.
-      dockerfile: Dockerfile
+# services -> the main block where we define all the containers we want to run together.
 
-    # 'ports' maps the ports between your Mac (host) and the container.
-    # Format is "HOST_PORT:CONTAINER_PORT"
-    # Command line equivalent: -p 4001:8080
-    ports:
-      - "4001:8080"
-
-    # 'environment' passes environment variables into the container when it runs.
-    # Command line equivalent: -e DATABASE_URL=postgresql://...
+  # =========================================================================
+  # Service 1: lab_log_postgresql (Database)
+  # Command line equivalent: docker run -d --name lab_log_postgresql -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=password -e POSTGRES_DB=lablog -p 5432:5432 -v postgresql_data:/var/lib/postgresql/data --network lablog-net postgres:latest
+  # Details: This runs the official PostgreSQL database. We pass environment variables to set up the default user and database. We also map a volume so your database data isn't deleted when the container stops!
+  # =========================================================================
+  lab_log_postgresql:
+    # lab_log_postgresql -> defines the postgresql service container name.
+    image: postgres:latest
+    # image -> tells Docker to use the official 'postgres' image tagged as 'latest' from Docker Hub.
     environment:
-      - DATABASE_URL=postgresql://postgres:password@host.docker.internal:5432/postgres
-
-
-    # 'volumes' links folders on your Mac directly to folders in the container.
-    # This allows you to edit files on your Mac and see changes immediately without rebuilding!
-    # Command line equivalent: -v $(pwd):/app -v /app/node_modules
+    # environment -> block to pass environment variables (secrets/config) into this container.
+      - POSTGRES_USER=postgres
+      # POSTGRES_USER -> sets the default database username.
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      # POSTGRES_PASSWORD -> pulls the password securely from your hidden .env file!
+      - POSTGRES_DB=${POSTGRES_DB}
+      # POSTGRES_DB -> pulls the database name securely from your hidden .env file!
+    ports:
+    # ports -> maps ports from your Mac host to the Docker container.
+      - "5432:5432"
+      # "5432:5432" -> format is "HOST:CONTAINER". Maps Mac's port 5432 to the container's port 5432.
+    networks:
+    # networks -> connects this container to a custom Docker network so it can talk to other services.
+      - lablog-net
+      # lablog-net -> the name of the network we are connecting this service to.
     volumes:
-      # We map the current folder on Mac (./) to the /app folder inside the container.
-      - ./:/app
-      # We use an "anonymous volume" for node_modules so that Docker keeps the Linux version 
-      # of the modules installed inside the container, rather than using your Mac's modules.
-      - /app/node_modules
+    # volumes -> links folders on your Mac or named volumes to folders inside the container.
+      - postgresql_data:/var/lib/postgresql/data
+      # postgresql_data:/var/lib/postgresql/data -> Maps our named volume 'postgresql_data' to the folder where Postgres securely stores its data inside the container.
 
-      
+  # =========================================================================
+  # Service 2: api (Node.js Application)
+  # Command line equivalent: docker build -t lab-log-api . && docker run -d -p 4001:8080 --name api -e DATABASE_URL="postgresql://postgres:password@lab_log_postgresql:5432/lablog" -v $(pwd):/app -v /app/node_modules --network lablog-net lab-log-api
+  # Details: This builds your Node.js app. It maps port 4001 to 8080. It uses depends_on to ensure the database starts first. It passes a properly formatted connection string so Prisma can connect to the database container.
+  # =========================================================================
+  api:
+    # api -> defines the Node.js application service container name.
+    build:
+    # build -> tells Docker to build a custom image from our source code instead of pulling an existing one.
+      context: .
+      # context -> means use the current directory ('.') to find the files for the build.
+      dockerfile: Dockerfile
+      # dockerfile -> tells it exactly which file contains the build instructions.
+    ports:
+    # ports -> maps ports between your Mac host and the container.
+      - "4001:8080"
+      # "4001:8080" -> format is "HOST:CONTAINER". Maps Mac's port 4001 to the container's internal port 8080.
+    environment:
+    # environment -> block to pass environment variables into the container when it runs.
+      - DATABASE_URL=${DATABASE_URL}
+      # DATABASE_URL -> pulls the connection string securely from your hidden .env file!
+    volumes:
+    # volumes -> links folders on your Mac directly to folders in the container for live-editing!
+      - ./:/app
+      # ./:/app -> maps the current folder on Mac (./) to the /app folder inside the container.
+      - /app/node_modules
+      # /app/node_modules -> an "anonymous volume" so Docker keeps the Linux version of the modules installed inside the container, rather than using your Mac's modules.
+    networks:
+    # networks -> connects this container to our custom network so it can communicate with the database.
+      - lablog-net
+      # lablog-net -> the name of the custom network.
+    depends_on:
+    # depends_on -> tells Docker about start-up order dependencies.
+      - lab_log_postgresql
+      # lab_log_postgresql -> tells Docker not to start the API container until the database container has been started.
+
+# =========================================================================
+# Step 3: define networks
+# Command line equivalent: docker network create -d bridge lablog-net
+# Details: Creates a custom network so that 'api' and 'lab_log_postgresql' can talk to each other using their service names.
+# =========================================================================
+networks:
+# networks -> the top-level block where we create the custom networks used by our services.
+  lablog-net:
+  # lablog-net -> defines the name of our custom network.
+    driver: bridge
+    # driver -> tells Docker to use the default 'bridge' driver, which allows containers on the same network to communicate.
+
+# =========================================================================
+# Step 4: define volumes
+# Command line equivalent: docker volume create postgresql_data
+# Details: Creates a persistent, named volume managed by Docker to store your Postgres database files safely so they aren't lost when you restart Docker.
+# =========================================================================
+volumes:
+# volumes -> the top-level block where we define named volumes managed by Docker.
+  postgresql_data:
+  # postgresql_data -> defines the name of the persistent volume used to store database files.
